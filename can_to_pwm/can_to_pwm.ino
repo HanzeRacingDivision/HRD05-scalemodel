@@ -12,8 +12,20 @@
 
 #include <CAN.h>
 
-void setup() {
-  Serial.begin(9600);
+#define ESC1_OUT 3
+#define ESC2_OUT 5
+#define SERVO_OUT 9
+
+int THROTTLE = 0;
+int REVERSE = 0;
+int STEER = 0;
+
+void setup() {  
+  pinMode(ESC1_OUT, OUTPUT);
+  pinMode(ESC2_OUT, OUTPUT);
+  pinMode(SERVO_OUT, OUTPUT);
+   
+  Serial.begin(115200);
   while (!Serial);
 
   Serial.println("CAN Receiver");
@@ -42,8 +54,8 @@ void loop() {
       i++;
     }
 
-    Serial.println(data[0]);
-
+    int CANthrottle = data[0];
+  
 //    for(int i = 0; i < sizeof(data); i++){
 //      Serial.print("Byte ");
 //      Serial.print(i);
@@ -55,9 +67,20 @@ void loop() {
     switch (packetID) {
       case 0x12:
         while (CAN.available() && (i < 8)) {
-          data[i] = CAN.read();
+          data[i] = CAN.read();         
           i++;
         }
+
+        THROTTLE = map(data[0], 0, 255, 191, 255);
+        REVERSE = map(data[1], 0, 255, 191, 127);
+        STEER = map(data[2], 0, 255, 127, 255);
+
+        
+        Serial.println(THROTTLE);
+        Serial.println(REVERSE);
+        Serial.println(STEER);
+        
+        
         break;
       default:
         Serial.print("Unknown ID: ");
