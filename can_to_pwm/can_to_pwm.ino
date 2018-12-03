@@ -13,9 +13,9 @@
 #include <CAN.h>
 
 #define ESC1_OUT 3
-#define ESC2_OUT 5
+#define ESC2_OUT 6
 #define STEER_OUT 9
-#define MAX_TIMEOUT 500
+#define MAX_TIMEOUT 250
 
 int MOTOR1 = 191;
 int MOTOR2 = 191;
@@ -32,7 +32,7 @@ void setup() {
   Serial.begin(115200);
   while (!Serial);
 
-  Serial.println("CAN RECEIVER");
+  Serial.println("SCALE MODEL IS LIVE");
 
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
@@ -66,8 +66,8 @@ void loop() {
 
         //REVERSE = map(data[1], 0, 255, 191, 127);
         
-        MOTOR2 = map(data[0], 0, 255, 191, 220);
-        MOTOR1 = map(data[0], 0, 255, 191, 220); // Map this to the second motor value
+        MOTOR1 = map(data[0], 0, 255, 175, 200); // Map these to the 2 motor values
+        MOTOR2 = map(data[0], 0, 255, 175, 200);
 
         latest_message_time = millis();
         
@@ -116,8 +116,8 @@ void loop() {
     Serial.println();
   }
 
-//  analogWrite(ESC1_OUT, MOTOR1);
-//  analogWrite(ESC2_OUT, MOTOR2);
+  analogWrite(ESC1_OUT, MOTOR1);
+  analogWrite(ESC2_OUT, MOTOR2);
   analogWrite(STEER_OUT, STEER);
 
 }
