@@ -13,8 +13,8 @@
 #include <CAN.h>
 
 #define ESC1_OUT 3
-#define ESC2_OUT 6
-#define STEER_OUT 9
+#define ESC2_OUT 9
+#define STEER_OUT 5
 #define MAX_TIMEOUT 250
 
 int MOTOR1 = 191;
@@ -65,9 +65,10 @@ void loop() {
       case 0x12:
 
         //REVERSE = map(data[1], 0, 255, 191, 127);
+
+        MOTOR1 = map(data[0], 255, 0, 170, 205);
+        MOTOR2 = map(data[0], 0, 255, 170, 205); // Map these to the 2 motor values
         
-        MOTOR1 = map(data[0], 0, 255, 175, 200); // Map these to the 2 motor values
-        MOTOR2 = map(data[0], 0, 255, 175, 200);
 
         latest_message_time = millis();
         
