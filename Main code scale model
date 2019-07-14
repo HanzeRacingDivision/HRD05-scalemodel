@@ -1,0 +1,183 @@
+#include <math.h>
+#include <Wire.h>
+#include <CAN.h>
+#include "MPU_Code.h"
+//#include <Servo.h>   // uit gecomment door het te kort aan pwm poorten, later meer. 
+#include <MPU6050.h>
+
+//Servo myservo;
+
+#define motor1Pin 9
+#define motor2Pin 3
+//#define servoPin 6
+
+int maxTimeout = 300;                   //300 milli seconde, tijd tussen can waardes
+int BRAKE, STEER, servoHoek;
+float MOTOR1, MOTOR2;
+float VHZ;
+
+float w_r = 0; //Wheel speed right rear
+float w_l = 0; //Wheel speed left rear
+float V = 0; //Speed in m/s
+float d = 0.178; //Right - Left Tire Distance = 178mm
+float r = 0.08; //Wheel 80mm
+float l = 0.255; //Front - Rear Axle Length
+float stuurHoek = 0; //Steer angle at the wheels
+float w_v = 0; //Solid axle speed
+float K = .5; //K-gradient (for more info see documentation)
+float w_i = 0; //Inside wheel speed
+float w_o = 0; //Outside wheel speed
+float g = 9.81; //Gravitational constant
+float pi = 3.14159265359; //Pi constant
+float R1 = 0; //Cornering Radius calculated by yaw rate
+float R2 = 0; //Cornering Radius calculated by steer angle
+float w_z = 0; //yaw rate
+float w_al = 0; //yaw rate
+float w_ar = 0; //yaw rate
+
+void setup() {
+  Serial.begin(115200);
+  // put your setup code here, to run once:
+  if (!CAN.begin(250E3)) {
+    Serial.println("Starting CAN failed!");
+    while (1);
+  }
+  mpu_init();
+  //TCCR0B = TCCR0B & B11111000 | B00000100; // for PWM frequency of 244.14 Hz
+  //TCCR0B = TCCR0B & B11111000 | B00000100; // for PWM frequency of 244.14 Hz // pin 5 & 6. 
+  //myservo.attach(6);
+  pinMode(motor1Pin, OUTPUT);
+  pinMode(motor2Pin, OUTPUT);
+  //pinMode(servoPin, OUTPUT); // door een te kort aan pwm poorten met een goede frequency konden we alleen de twee achterwielen aanzetten of sturen en 1 achterwiel aan zetten. 
+  
+}
+
+void loop(){
+
+  // RECEIVE CAN MESSAGES
+  int packetSize = CAN.parsePacket();
+  byte data[11];
+  unsigned int i = 0;
+  //unsigned long current_time;
+  //unsigned long latest_message_time;
+
+
+  if (packetSize) {
+    while (CAN.available()) {
+      data[i] = CAN.read();
+      i++;
+    }
+
+    int packetID = CAN.packetId();
+    switch (packetID) {
+
+      // MOTOR DATA
+      case 0x12:
+        MOTOR1 = map(data[0], 0, 255, 171, 210); // Value data{0} is between 0 and 255
+        MOTOR1 = constrain(MOTOR1, 171, 210);
+        MOTOR2 = map(data[0], 0, 255, 171, 210); // Map these to the 2 motor values
+        MOTOR2 = constrain(MOTOR2, 210, 171);
+        VHZ = map(data[0], 128, 255, 0, 41);     // hoeksnelheid van de wielen in hz omgerekend vanuit pwm waardes van de motor, dit is gedaan doormiddel van een test.
+        VHZ = constrain(VHZ, 0, 41);
+        BRAKE = data[1];                          // Value between 0 and 255
+        STEER = data[2];                          // Value between 0 and 255
+
+        if (BRAKE > 10) {   // als er word geremd
+          MOTOR1 = 191;
+          MOTOR2 = 191;
+        }
+
+        servoHoek = map(STEER, 0, 255, 5, 80);            // een servo waarde maken uit de potmeter waarde
+        stuurHoek = map(STEER, 0, 255, -23, 23);          // de stuurhoek in graden maken met de potmeter waarde
+
+        latest_message_time = millis();
+
+        break;
+
+      //      // STEERING CONTROL; MID: 194, Right: 155, Left: 234
+      //      case 0x15:
+      //
+      //        STEER = map(data[0], 0, 255, 155, 234);
+      //        latest_message_time = millis();
+      //        break;
+      //
+      //      // FALLBACK
+
+      default:
+
+        Serial.print("Unknown ID: ");
+        Serial.print(packetID);
+        Serial.println();
+        break;
+    }
+  }
+
+  current_time = millis();
+  // Reset to safe values if CAN communication is lost
+  if (current_time - latest_message_time > maxTimeout) {
+
+    MOTOR1 = 191;
+    MOTOR2 = 191;
+    STEER = 194;
+    servoHoek = 35;
+    stuurHoek = 0;
+    Serial.println("CAN TIMEOUT");
+
+  } else {/*
+    Serial.print("STEER: ");
+    Serial.print(stuurHoek);
+    Serial.print("\t");
+    Serial.print("MOTOR1: ");
+    Serial.print(MOTOR1);
+    Serial.print("\t");
+    Serial.print("MOTOR2: ");
+    Serial.print(MOTOR2);
+    Serial.println();*/
+  }
+
+  //IMPORTING CAN DATA
+
+  w_ar = MOTOR1;
+  w_al = MOTOR2;
+  //w_z = MPU_CALC;
+
+  //CALCULATING THE CORNERING RADIUS WITH THE YAW RATE
+  V = VHZ * pi * r; //S P E E D in m/s
+  // Serial.print(V);
+  R1 = V / w_z; //Corner radius calculated using the yaw rate from the MPU
+  // Serial.print(R1);
+  R2 = (l / stuurHoek) + K * ((V * V) / (g * stuurHoek)); //CALCULATING THE CORNERING RADIUS WITH THE STEER ANGLE hoek
+  //Serial.print(R2);
+  //stuurHoek = (l / R2) + K * ((V * V) / (g * R2)); //Tire angle on the road vanaf canbus
+
+  w_i = ((l + (d / 2) * tan(double(stuurHoek/180*pi))) / l);
+  w_o = ((l - (d / 2) * tan(double(stuurHoek/180*pi))) / l); // CALCULATING THE WHEEL SPEED
+
+
+
+  if ( stuurHoek < 0) {
+    MOTOR1 = ((MOTOR1 - 190) * w_o) + 190;
+    MOTOR2 = ((MOTOR2 - 190) * w_i) + 190;
+  }
+  else {
+    MOTOR1 = ((MOTOR1 - 190) * w_o) + 190;
+    MOTOR2 = ((MOTOR2 - 190) * w_i) + 190;
+  }
+  MOTOR1 = constrain(MOTOR1, 167, 214);
+  MOTOR2 = constrain(MOTOR2, 167, 214);
+
+  Serial.print("servo: ");
+  Serial.print(stuurHoek);
+  Serial.print("\t");
+  Serial.print("wiel1: ");
+  Serial.print(MOTOR1);
+  Serial.print("\t");
+  Serial.print("wiel2: ");
+  Serial.print(MOTOR2);
+  Serial.println();
+
+  //myservo.write(servoHoek);
+  analogWrite(motor1Pin, int(MOTOR1));
+  analogWrite(motor2Pin, int(MOTOR2));
+  //analogWrite(servoPin, STEER);  
+}
